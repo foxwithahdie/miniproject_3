@@ -1,0 +1,5 @@
+*.exe
+build_folder
+test_build_folder
+setup.v
+initial_cond.txt
