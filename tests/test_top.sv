@@ -28,7 +28,7 @@ module test_top;
    initial begin
         $dumpfile(file_name);
         $dumpvars(0, test_top);
-        #100000000
+        #5000000
         $finish;
     end
 

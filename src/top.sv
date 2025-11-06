@@ -1,140 +1,131 @@
+`include "src/memory.sv"
 `include "src/led_matrix.sv"
 `include "src/controller.sv"
 `include "src/game.sv"
-`include "src/memory.sv"
 
-module top (
-    input logic clk,
-    output logic _48b,
-    output logic _45a
+// led_matrix top level module
+
+module top(
+    input logic     clk,
+    output logic    _48b, 
+    output logic    _45a
 );
 
-logic [63:0] red_state;
-logic [63:0] next_red_state;
-// logic [63:0] green_state;
-// logic [63:0] next_green_state;
-// logic [63:0] blue_state;
-// logic [63:0] next_blue_state;
+    logic [7:0] red_data;
+    logic [63:0] red_board;
+    logic [63:0] next_red_board;
+    logic [7:0] green_data;
+    logic [63:0] green_board;
+    logic [63:0] next_green_board;
+    logic [7:0] blue_data;
+    logic [63:0] blue_board;
+    logic [63:0] next_blue_board;
+    logic red_writing_board_done;
+    logic green_writing_board_done;
+    logic blue_writing_board_done;
 
-logic curr_cell;
-logic [2:0] prev_cell_row = 3'b0;
-logic [2:0] prev_cell_col = 3'b0;
-logic [2:0] cell_row;
-logic [2:0] cell_col;
+    logic [5:0] pixel;
+    logic [5:0] address;
 
-logic write_board_state;
-logic push_cell;
-logic led_matrix_push;
+    logic [23:0] shift_reg = 24'd0;
+    logic load_sreg;
+    logic transmit_pixel;
+    logic shift;
+    logic ws2812b_out;
 
-logic place_in_led_matrix;
+    assign address = pixel;
 
+    // Instance sample memory for red channel
     memory #(
-        .INIT_FILE      ("initial_cond.txt")
-    ) u1 (
-        .clk             (clk),
-        .board           (red_state)
+        .INIT_STATE     ("data/red.txt")
+    ) red_memory (
+        .clk            (clk), 
+        .read_address   (address),
+        .next_state     (next_red_board),
+        .curr_state     (red_board),
+        .read_data      (red_data),
+        .write_board_state (transmit_pixel),
+        .writing_board_done (red_writing_board_done)
     );
 
-    // memory #(
-    //     .INIT_FILE      ("initial_cond.txt")
-    // ) u2 (
-    //     .clk            (clk), 
-    //     .read_cell_row  (cell_row),
-    //     .read_cell_col  (cell_col),
-    //     .board          (green_state),
-    //     .curr_cell      (curr_cell)
-    // );
+    // Instance sample memory for green channel
+    memory #(
+        .INIT_STATE     ("data/green.txt")
+    ) green_memory (
+        .clk            (clk), 
+        .read_address   (address),
+        .next_state     (next_green_board),
+        .curr_state     (green_board),
+        .read_data      (green_data),
+        .write_board_state (transmit_pixel),
+        .writing_board_done (green_writing_board_done)
+    );
 
-    // memory #(
-    //     .INIT_FILE      ("initial_cond.txt")
-    // ) u3 (
-    //     .clk            (clk), 
-    //     .read_cell_row   (cell_row),
-    //     .read_cell_col   (cell_col),
-    //     .board           (blue_state),
-    //     .curr_cell       (curr_cell)
-    // );
+    // Instance sample memory for blue channel
+    memory #(
+        .INIT_STATE     ("data/blue.txt")
+    ) blue_memory (
+        .clk            (clk), 
+        .read_address   (address),
+        .next_state     (next_blue_board),
+        .curr_state     (blue_board), 
+        .read_data      (blue_data),
+        .write_board_state (transmit_pixel),
+        .writing_board_done (blue_writing_board_done)
 
-    controller #(
-    ) u4 (
+    );
+
+    // Instance the WS2812B output driver
+    led_matrix led_matrix_push (
+        .clk            (clk), 
+        .serial_in      (shift_reg[23]), 
+        .transmit       (transmit_pixel), 
+        .ws2812b_out    (ws2812b_out), 
+        .shift          (shift)
+    );
+
+    // Instance the controller
+    controller main_controller (
+        .clk            (clk), 
+        .load_sreg      (load_sreg), 
+        .transmit_pixel (transmit_pixel), 
+        .pixel          (pixel)
+    );
+
+    game red_game (
         .clk (clk),
-        .prev_cell_row (prev_cell_row),
-        .prev_cell_col (prev_cell_col),
-        .cell_row (cell_row),
-        .cell_col (cell_col),
-        .curr_cell (curr_cell),
-        .write_board_state (write_board_state),
-        .push_cell (push_cell)
+        .board (red_board),
+        .next_state (next_red_board),
+        .write_board_state (transmit_pixel),
+        .writing_board_done (red_writing_board_done)
     );
 
-    game #() u7 (
+    game green_game (
         .clk (clk),
-        .board (red_state),
-        .curr_cell (curr_cell),
-        .read_cell_row (cell_row),
-        .read_cell_col (cell_col),
-        .write_board_state (write_board_state),
-        .next_state (next_red_state)
+        .board (green_board),
+        .next_state (next_green_board),
+        .write_board_state (transmit_pixel),
+        .writing_board_done (green_writing_board_done)
     );
 
-    // game #() u8 (
-    //     .clk (clk),
-    //     .board (green_state),
-    //     .curr_cell (curr_cell),
-    //     .read_cell_row (cell_row),
-    //     .read_cell_col (cell_col),
-    //     .write_board_state (write_board_state),
-    //     .next_state (next_green_state)
-    // );
-
-    // game #() u9 (
-    //     .clk (clk),
-    //     .board (blue_state),
-    //     .curr_cell (curr_cell),
-    //     .read_cell_row (cell_row),
-    //     .read_cell_col (cell_col),
-    //     .write_board_state (write_board_state),
-    //     .next_state (next_blue_state)
-    // );
-
-    led_matrix #() u10 (
+    game blue_game (
         .clk (clk),
-        .curr_cell (curr_cell),
-        .push_cell (push_cell),
-        .led_matrix_push (led_matrix_push),
-        .place_in_led_matrix (place_in_led_matrix)
+        .board (blue_board),
+        .next_state (next_blue_board),
+        .write_board_state (transmit_pixel),
+        .writing_board_done (blue_writing_board_done)
     );
 
-    always_comb begin
-        prev_cell_row = cell_row;
-        prev_cell_col = cell_col;
+    always_ff @(posedge clk) begin
+        if (load_sreg) begin
+            shift_reg <= { green_data, red_data, blue_data };
+        end
+        else if (shift) begin
+            shift_reg <= { shift_reg[22:0], 1'b0 };
+        end
     end
 
-    assign _45a = ~led_matrix_push;
-    assign _48b = led_matrix_push;
-    // controller #(
-    // ) u5 (
-    //     .clk (clk)
-    //     .prev_cell_row (cell_row),
-    //     .prev_cell_col (cell_col),
-    //     .cell_row (cell_row),
-    //     .cell_col (cell_col),
-    //     .curr_cell (curr_cell),
-    //     .write_board_state (write_board_state),
-    //     .push_cell (push_cell)
-    // );
-
-    // controller #(
-    // ) u6 (
-    //     .clk (clk)
-    //     .prev_cell_row (cell_row),
-    //     .prev_cell_col (cell_col),
-    //     .cell_row (cell_row),
-    //     .cell_col (cell_col),
-    //     .curr_cell (curr_cell),
-    //     .write_board_state (write_board_state),
-    //     .push_cell (push_cell)
-    // );
-
+    assign _48b = ws2812b_out;
+    assign _45a = ~ws2812b_out;
 
 endmodule
